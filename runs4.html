@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>数値ランゲーム 地獄編</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: white;
+    text-align: center;
+    font-family: sans-serif;
+  }
+  canvas {
+    display: block;
+    margin: auto;
+    background: #222;
+  }
+</style>
+</head>
+<body>
+<h2>数値ランゲーム</h2>
+<canvas id="game" width="400" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+// ===== 基本 =====
+let hp = 100;
+const HP_MAX = 100;
+let gameOver = false;
+let frame = 0;
+let startTime = Date.now();
+
+// ===== レーン =====
+const lanes = [80, 180, 280];
+let laneIndex = 1;
+
+// ===== プレイヤー =====
+const player = {
+  x: lanes[laneIndex],
+  y: 480,
+  size: 40
+};
+
+// ===== 入力 =====
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft" || e.key === "a") laneIndex = Math.max(0, laneIndex - 1);
+  if (e.key === "ArrowRight" || e.key === "d") laneIndex = Math.min(2, laneIndex + 1);
+});
+
+// ===== ユーティリティ =====
+function rand(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function isHit(a, b) {
+  return (
+    a.x < b.x + b.w &&
+    a.x + a.size > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.size > b.y
+  );
+}
+
+// ===== アイテム =====
+const items = [];
+
+function spawnWave() {
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+
+  // 2 or 3 レーンを埋める
+  const laneCount = elapsed > 20 && Math.random() < 0.4 ? 3 : 2;
+  const shuffled = [...lanes].sort(() => Math.random() - 0.5);
+
+  for (let i = 0; i < laneCount; i++) {
+    const isParam = Math.random() < 0.55;
+    if (isParam) {
+      const ops = ["+", "-", "×", "÷"];
+      items.push({
+        type: "param",
+        op: ops[rand(0, 3)],
+        value: rand(5, 25),
+        x: shuffled[i],
+        y: -40,
+        w: 40,
+        h: 30
+      });
+    } else {
+      items.push({
+        type: "enemy",
+        value: rand(15, 45),
+        x: shuffled[i],
+        y: -40,
+        w: 40,
+        h: 30
+      });
+    }
+  }
+}
+
+// ===== 更新 =====
+function update() {
+  if (gameOver) return;
+
+  frame++;
+  player.x = lanes[laneIndex];
+
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+
+  // 落下スピード（かなり速め）
+  const speed = 6 + Math.floor(elapsed / 10) * 1.5;
+
+  // プレイヤーサイズ（HP依存）
+  player.size = 20 + (hp / HP_MAX) * 50;
+
+  // 出現頻度UP
+  if (frame % 35 === 0) spawnWave();
+
+  items.forEach(item => item.y += speed);
+
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (isHit(player, item)) {
+      if (item.type === "param") {
+        switch (item.op) {
+          case "+": hp += item.value; break;
+          case "-": hp -= item.value; break;
+          case "×": hp *= item.value; break;
+          case "÷": hp = Math.floor(hp / item.value); break;
+        }
+        if (hp > HP_MAX) hp = HP_MAX;
+        if (hp <= 0) endGame(elapsed);
+      } else {
+        hp -= item.value;
+        if (hp <= 0) endGame(elapsed);
+      }
+      items.splice(i, 1);
+    }
+  }
+
+  // 画面外削除
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i].y > canvas.height) items.splice(i, 1);
+  }
+}
+
+function endGame(time) {
+  gameOver = true;
+  alert(`ゲームオーバー\n生存時間：${time}秒`);
+}
+
+// ===== 描画 =====
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // レーン
+  ctx.strokeStyle = "#444";
+  lanes.forEach(x => {
+    ctx.beginPath();
+    ctx.moveTo(x + 20, 0);
+    ctx.lineTo(x + 20, canvas.height);
+    ctx.stroke();
+  });
+
+  // プレイヤー
+  ctx.fillStyle = "cyan";
+  ctx.fillRect(player.x, player.y, player.size, player.size);
+
+  // UI
+  ctx.fillStyle = "white";
+  ctx.font = "18px sans-serif";
+  ctx.fillText(`HP: ${hp}`, 10, 30);
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  ctx.fillText(`時間: ${elapsed}秒`, 260, 30);
+
+  // アイテム
+  items.forEach(item => {
+    ctx.fillStyle = item.type === "param" ? "#eee" : "red";
+    ctx.fillRect(item.x, item.y, item.w, item.h);
+    ctx.fillStyle = item.type === "param" ? "black" : "white";
+    const text = item.type === "param" ? item.op + item.value : item.value;
+    ctx.fillText(text, item.x + 5, item.y + 22);
+  });
+}
+
+// ===== ループ =====
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
