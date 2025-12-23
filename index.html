@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>数値ランゲーム改</title>
+<title>数値ランゲーム 最終進化</title>
 <style>
   body {
     margin: 0;
@@ -26,11 +26,12 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-let hp = 5;
+let hp = 100;
+const HP_MAX = 100;
 let gameOver = false;
 let frame = 0;
 let startTime = Date.now();
-let speedBase = 2;
+let speedBase = 4; // 初期から速め
 
 // ===== レーン =====
 const lanes = [80, 180, 280];
@@ -45,15 +46,16 @@ const player = {
   scale: 1
 };
 
-// ===== 音 =====
+// ===== サウンド =====
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-function playSound(freq, duration = 0.1) {
+function playSound(freq, duration = 0.12) {
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.frequency.value = freq;
   osc.connect(gain);
   gain.connect(audioCtx.destination);
+  gain.gain.value = 0.1;
   osc.start();
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
   osc.stop(audioCtx.currentTime + duration);
@@ -63,9 +65,9 @@ function playSound(freq, duration = 0.1) {
 (function bgm(){
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  osc.frequency.value = 120;
   osc.type = "sine";
-  gain.gain.value = 0.05;
+  osc.frequency.value = 140;
+  gain.gain.value = 0.04;
   osc.connect(gain);
   gain.connect(audioCtx.destination);
   osc.start();
@@ -94,18 +96,17 @@ function spawnItem() {
 
   if (isParam) {
     const ops = ["+", "-", "×", "÷"];
-    const op = ops[rand(0, 3)];
     items.push({
       type: "param",
-      op,
-      value: rand(2, 9),
+      op: ops[rand(0, 3)],
+      value: rand(5, 30),
       x: lane,
       y: -40
     });
   } else {
     items.push({
       type: "enemy",
-      value: rand(3, 15),
+      value: rand(10, 40),
       x: lane,
       y: -40
     });
@@ -128,11 +129,11 @@ function update() {
   frame++;
   player.x = lanes[laneIndex];
 
-  // スピードアップ
+  // 経過時間 & スピード加速
   const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
-  speedBase = 2 + Math.floor(elapsedSec / 10) * 0.5;
+  speedBase = 4 + Math.floor(elapsedSec / 10) * 1.2;
 
-  if (frame % 70 === 0) spawnItem();
+  if (frame % 55 === 0) spawnItem();
 
   items.forEach(item => item.y += speedBase);
 
@@ -140,32 +141,41 @@ function update() {
     const item = items[i];
     if (isHit(player, item)) {
       if (item.type === "param") {
-        playSound(800);
+        playSound(900);
         switch (item.op) {
           case "+": hp += item.value; break;
           case "-": hp -= item.value; break;
           case "×": hp *= item.value; break;
           case "÷": hp = Math.floor(hp / item.value); break;
         }
-        if (hp < 1) hp = 1;
+        if (hp > HP_MAX) hp = HP_MAX;
+        if (hp <= 0) {
+          endGame(elapsedSec);
+          return;
+        }
         player.scale = 1.3;
       } else {
-        playSound(200);
+        playSound(250);
         hp -= item.value;
         if (hp <= 0) {
-          gameOver = true;
-          alert(`ゲームオーバー\n生存時間：${elapsedSec}秒`);
+          endGame(elapsedSec);
+          return;
         }
       }
       items.splice(i, 1);
     }
   }
 
-  player.scale += (1 - player.scale) * 0.1;
+  player.scale += (1 - player.scale) * 0.12;
 
   for (let i = items.length - 1; i >= 0; i--) {
     if (items[i].y > canvas.height) items.splice(i, 1);
   }
+}
+
+function endGame(time) {
+  gameOver = true;
+  alert(`ゲームオーバー\n生存時間：${time}秒`);
 }
 
 // ===== 描画 =====
@@ -192,15 +202,14 @@ function draw() {
   // UI
   ctx.fillStyle = "white";
   ctx.font = "18px sans-serif";
-  ctx.fillText("体力: " + hp, 10, 30);
+  ctx.fillText("HP: " + hp + " / 100", 10, 30);
   const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
   ctx.fillText("時間: " + elapsedSec + "秒", 260, 30);
 
   // アイテム
   items.forEach(item => {
     if (item.type === "param") {
-      const colors = { "+": "lime", "-": "orange", "×": "skyblue", "÷": "violet" };
-      ctx.fillStyle = colors[item.op];
+      ctx.fillStyle = "#eee"; // 全パラメータ同色
       ctx.fillRect(item.x, item.y, 40, 30);
       ctx.fillStyle = "black";
       ctx.fillText(item.op + item.value, item.x + 5, item.y + 22);
@@ -208,7 +217,7 @@ function draw() {
       ctx.fillStyle = "red";
       ctx.fillRect(item.x, item.y, 40, 30);
       ctx.fillStyle = "white";
-      ctx.fillText(item.value, item.x + 10, item.y + 22);
+      ctx.fillText(item.value, item.x + 8, item.y + 22);
     }
   });
 }
